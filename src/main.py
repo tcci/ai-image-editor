@@ -18,6 +18,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from PIL.Image import Image, open as open_image
 
+import logfire
+
 from .transform import transform_image, Refusal, ImageTransform, ImageTransformDef
 
 
@@ -36,6 +38,7 @@ app.mount('/static', StaticFiles(directory=static_dir), name='static')
 
 
 @app.get('/', response_class=HTMLResponse)
+@app.head('/', include_in_schema=False)
 async def index():
     return FileResponse(THIS_DIR / 'index.html')
 
@@ -93,45 +96,68 @@ class Sessions:
 
 
 sessions = Sessions()
+tmp_files_dir = 'tmp_images'
 
 
-def load_image(image: UploadFile) -> Image:
-    try:
-        img = open_image(image.file)
-    except OSError:
-        raise HTTPException(status_code=400, detail='Invalid image')
-    return img
+def load_image(image_file: UploadFile | None = None, image_url: str | None = None) -> Image:
+    if image_file is not None:
+        try:
+            img = open_image(image_file.file)
+        except OSError:
+            raise HTTPException(status_code=400, detail='Invalid image')
+        return img
+    elif image_url is not None:
+        path = static_dir / tmp_files_dir / Path(image_url).name
+        if not path.is_file():
+            raise HTTPException(status_code=404, detail='Image not found')
+        try:
+            img = open_image(path)
+        except OSError:
+            raise HTTPException(status_code=400, detail='Invalid image')
+        return img
+    else:
+        raise HTTPException(status_code=400, detail='No image provided')
 
 
 class NewImageResponse(BaseModel):
+    """
+    WARNING: should match `NewImageResponse` in typescript
+    """
     type: Literal['new-image'] = 'new-image'
     session_id: str
     filename: str
     width: int
     height: int
+    format: str
     mode: str
 
 
 @app.post('/new-image/')
-async def new_image(image: UploadFile, pil_image: Annotated[Image, Depends(load_image)]) -> NewImageResponse:
+async def new_image(image_file: UploadFile, pil_image: Annotated[Image, Depends(load_image)]) -> NewImageResponse:
     sessions.remove_old_sessions()
     width, height = pil_image.size
     session = sessions.add_new(width, height, pil_image.mode)
     return NewImageResponse(
         session_id=session.session_id,
-        filename=image.filename,
+        filename=image_file.filename,
         width=width,
         height=height,
+        format=pil_image.format,
         mode=pil_image.mode,
     )
 
 
 class TransformationSuccess(BaseModel):
     url: str
+    width: int
+    height: int
     transformation: ImageTransformDef
 
 
 class PromptResponse(BaseModel):
+    """
+    WARNING: should match `PromptResponse` in typescript
+    """
     type: Literal['prompt-response'] = 'prompt-response'
     result: str | TransformationSuccess
 
@@ -150,13 +176,16 @@ async def prompt_function(
     else:
         assert isinstance(result, ImageTransform), f'Unexpected result type {type(result)}'
         img_format = result.transformation.save_as or pil_image.format
-        temp_path = Path('tmp_images') / f'{session.session_id}-{time()}.{img_format.lower()}'
+        temp_path = Path(tmp_files_dir) / f'{session.session_id}-{time()}.{img_format.lower()}'
         save_path = static_dir / temp_path
         save_path.parent.mkdir(parents=True, exist_ok=True)
+        width, height = result.image.size
         result.image.save(save_path, img_format)
         return PromptResponse(
             result=TransformationSuccess(
                 url=f'/static/{temp_path}',
+                width=width,
+                height=height,
                 transformation=result.transformation,
             )
         )

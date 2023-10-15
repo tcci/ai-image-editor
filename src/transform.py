@@ -136,7 +136,13 @@ functions = [
         'parameters': ImageTransformDef.model_json_schema(),
     }
 ]
-setup = "Help the use by defining how an image should be transformed based on the user's input."
+setup = """
+Help the use by defining how an image should be transformed based on the user's input.
+
+If you unable to interpret the user's input, please explain who, do NOT respond with code examples.
+
+Do NOT use markdown formatting, just plain text.
+"""
 
 
 if __name__ == '__main__':
