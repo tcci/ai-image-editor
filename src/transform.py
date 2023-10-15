@@ -5,10 +5,10 @@ from typing import Annotated, Literal
 
 import openai
 from annotated_types import Ge, Le
-from PIL.Image import Image, open as open_image
+from PIL.Image import Image, open as open_image, new as new_image
 from PIL import ImageEnhance as image_enhance
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 import logfire
 
@@ -28,11 +28,14 @@ class CropImage(BaseModel):
 class ImageTransformDef(BaseModel):
     resize: CropImage | ScaleImage | None = None
     make_grayscale: bool | None = None
-    remove_transparency: bool | None = None
-    make_transparent: bool | None = None
-    transparency_threshold: Annotated[int, Ge(0), Le(255)] = 200
-    brightness_adjustment_percentage: Annotated[float, Ge(0), Le(100)] | None = None
-    contrast_adjustment_percentage: Annotated[float, Ge(0), Le(100)] | None = None
+    replace_trans_color: str | None = Field(None, description='Replace transparency with this color')
+    make_trans_threshold: Annotated[int, Ge(0), Le(255)] = Field(
+        None, description='Make the image transparent using this threshhold'
+    )
+    brightness_adjust: Annotated[float, Ge(0), Le(100)] | None = Field(
+        None, description='Brightness adjustment percentage'
+    )
+    contrast_adjust: Annotated[float, Ge(0), Le(100)] | None = Field(None, description='Contrast adjustment percentage')
     save_as: Literal['PNG', 'JPG', 'BMP'] = None
 
 
@@ -87,23 +90,25 @@ def transform_image(img: Image, user_prompt: str) -> Refusal | ImageTransform:
             if model.make_grayscale:
                 img = img.convert('L')
 
-            if model.remove_transparency:
-                img = img.convert('RGB')
+            if model.replace_trans_color is not None:
+                new_img = new_image('RGBA', img.size, model.replace_trans_color)
+                new_img.paste(img, mask=img)
+                img = new_img
 
-            if model.make_transparent:
+            if model.make_trans_threshold is not None:
                 img = img.convert('RGBA')
 
                 data = list(img.getdata())
 
                 for index, item in enumerate(data):
-                    if item[0] in range(model.transparency_threshold, 256):
+                    if item[0] + item[1] + item[2] > model.make_trans_threshold * 3:
                         data[index] = (255, 255, 255, 0)
 
                 img.putdata(data)
 
-            if (b := model.brightness_adjustment_percentage) is not None:
+            if (b := model.brightness_adjust) is not None:
                 img = image_enhance.Brightness(img).enhance(1 + b / 100)
-            if (c := model.contrast_adjustment_percentage) is not None:
+            if (c := model.contrast_adjust) is not None:
                 img = image_enhance.Contrast(img).enhance(1 + c / 100)
             return ImageTransform(img, model)
 
@@ -120,7 +125,11 @@ Help the use by defining how an image should be transformed based on the user's 
 
 If you unable to interpret the user's input, please explain who, do NOT respond with code examples.
 
-Do NOT use markdown formatting, just plain text.
+If possible, call the function rather than making recommendations to the user.
+
+DO NOT use markdown formatting, just plain text.
+
+DO NOT make function call suggestions.
 """
 
 

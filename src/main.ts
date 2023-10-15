@@ -68,20 +68,7 @@ class ImageEditor {
 
   constructor() {
     this.dynamic_el = getByID('dynamic')
-    this.addDndListeners()
-  }
-
-  addDndListeners() {
-    const dnd_el = getByID('dnd')
-    dnd_el.addEventListener('drop', (ev) => this.onDrop(ev, dnd_el))
-    dnd_el.addEventListener('dragover', (ev) => {
-      ev.preventDefault()
-      dnd_el.classList.add('dragover')
-    })
-    dnd_el.addEventListener('dragleave', (ev) => {
-      ev.preventDefault()
-      dnd_el.classList.remove('dragover')
-    })
+    this.render()
   }
 
   onDrop(event: DragEvent, dnd_el: HTMLElement) {
@@ -127,8 +114,11 @@ class ImageEditor {
     const { image } = this
     if (!image) {
       this.renderHtml(`
-<div id="dnd">drag and drop an image here to begin.</div>
-<div id="error" class="hidden"></div>`)
+<div class="dnd-container">
+  <div id="dnd">drag and drop an image here to begin.</div>
+  <div id="error" class="hidden"></div>
+</div>`)
+      this.addDndListeners()
       return
     }
 
@@ -142,20 +132,42 @@ class ImageEditor {
         : URL.createObjectURL(image.data)
     this.renderHtml(`
 <div class="image-area">
-  <img class="main-img" src="${src}" alt="${image.filename}" />
+  <div class="checkerboard">
+    <img class="main-img" src="${src}" alt="${image.filename}" />
+  </div>
   <div class="label">${image.filename} ${image.width}x${image.height}</div>
 </div>
-<div id="error" class="hidden"></div>
 <div class="conversation">
+  <div id="error" class="hidden"></div>
   ${messages}
   ${ImageEditor.renderFinal(loading)}
-</div>`)
+</div>
+`)
     const button = this.dynamic_el.querySelector('button.send')
     if (button) {
-      // todo on command+enter send
       button.addEventListener('click', () => this.send())
-      this.dynamic_el.querySelector('textarea')!.focus()
+      const textarea_el = this.dynamic_el.querySelector('textarea')!
+      // todo on command+enter send
+      textarea_el.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter' && (ev.metaKey || ev.ctrlKey)) {
+          this.send()
+        }
+      })
+      textarea_el.focus()
     }
+  }
+
+  addDndListeners() {
+    const dnd_el = getByID('dnd')
+    dnd_el.addEventListener('drop', (ev) => this.onDrop(ev, dnd_el))
+    dnd_el.addEventListener('dragover', (ev) => {
+      ev.preventDefault()
+      dnd_el.classList.add('dragover')
+    })
+    dnd_el.addEventListener('dragleave', (ev) => {
+      ev.preventDefault()
+      dnd_el.classList.remove('dragover')
+    })
   }
 
   static renderFinal(loading: boolean): string {
@@ -210,7 +222,11 @@ class ImageEditor {
         }
         this.render()
       })
-      .catch(() => {
+      .catch((e) => {
+        this.messages.push({
+          type: 'system',
+          text: `Error: ${e}`,
+        })
         this.render()
       })
   }
@@ -233,7 +249,7 @@ function renderMsg(msg: SystemMessage | UserMessage): string {
     }
     return `
 <h3>System</h3>
-<p>${msg.text}:</p>
+<p>${msg.text}</p>
 ${attrs}`
   } else {
     // user message
@@ -248,8 +264,18 @@ function convertToAttributes(obj: {
 }): Record<string, string> {
   const attrs: Record<string, string> = {}
   for (const [k, v] of Object.entries(obj)) {
-    if (v !== null) {
-      attrs[k] = convertJsonValue(v)
+    if (
+      typeof v === 'string' ||
+      typeof v === 'number' ||
+      typeof v === 'boolean'
+    ) {
+      attrs[k] = v.toString()
+    } else if (Array.isArray(v)) {
+      attrs[k] = v.map(convertJsonValue).join(', ')
+    } else if (v != null) {
+      for (const [k2, v2] of Object.entries(v)) {
+        attrs[`${k}.${k2}`] = convertJsonValue(v2)
+      }
     }
   }
   return attrs
@@ -272,7 +298,7 @@ function convertJsonValue(v: Json): string {
 }
 
 const title = (s: string) =>
-  s.replace('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+  s.replaceAll('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 
 async function post(url: string, body: FormData): Promise<any> {
   let r

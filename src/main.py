@@ -92,7 +92,7 @@ async def main_js(executor: Annotated[Executor, Depends(get_executor)]) -> Respo
 tmp_files_dir = 'tmp_images'
 
 
-def load_image(image_file: UploadFile | None = None, image_url: str | None = None) -> Image:
+def load_image(image_file: UploadFile | None = None, image_url: Annotated[str | None, Form()] = None) -> Image:
     if image_file is not None:
         try:
             img = open_image(image_file.file)
