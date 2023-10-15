@@ -1,0 +1,30 @@
+[project]
+name = 'static-maps'
+description = 'Tiling server to generate static map images.'
+version = '1'
+dependencies = [
+    'fastapi',
+    'uvicorn[standard]',
+    'openai',
+    'pillow',
+#    'logfire',
+]
+
+[tool.ruff]
+line-length = 120
+extend-select = ['Q', 'RUF100', 'C90']
+flake8-quotes = {inline-quotes = 'single', multiline-quotes = 'double'}
+mccabe = { max-complexity = 14 }
+
+[tool.black]
+color = true
+line-length = 120
+target-version = ['py311']
+skip-string-normalization = true
+skip-magic-trailing-comma = true
+
+[tool.pyright]
+typeCheckingMode = 'strict'
+include = ['src']
+reportUnnecessaryTypeIgnoreComment = true
+reportMissingTypeStubs = false

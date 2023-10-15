@@ -1,5 +1,4 @@
 import json
-from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Literal
@@ -11,23 +10,7 @@ from PIL import ImageEnhance as image_enhance
 
 from pydantic import BaseModel
 
-
-class Logfire:
-    @contextmanager
-    def span(self, *_args, **_kwargs):
-        yield
-
-    def info(self, *_args, **_kwargs):
-        pass
-
-    def warning(self, *_args, **_kwargs):
-        pass
-
-    def instrument(self, *_args, **_kwargs):
-        return lambda x: x
-
-
-logfire = Logfire()
+import logfire
 
 
 class ScaleImage(BaseModel):
@@ -64,22 +47,18 @@ class ImageTransform:
     transformation: ImageTransformDef
 
 
-@logfire.instrument('transform_image {image_path=} {user_prompt=!r}')
+@logfire.instrument('transform_image {img=} {user_prompt=!r}')
 def transform_image(img: Image, user_prompt: str) -> Refusal | ImageTransform:
     width, height = img.size
     logfire.info('image size is {width}x{height}', width=width, height=height)
     messages = [
         {'role': 'system', 'content': setup},
         {'role': 'system', 'content': f'image current size is {width}x{height}'},
-        {'role': 'user', 'content': user_prompt}
+        {'role': 'user', 'content': user_prompt},
     ]
 
     with logfire.span('calling OpenAI'):
-        response = openai.ChatCompletion.create(
-            model='gpt-4',
-            messages=messages,
-            functions=functions,
-        )
+        response = openai.ChatCompletion.create(model='gpt-4', messages=messages, functions=functions)
         tokens_used = response['usage']['prompt_tokens']
         logfire.info('got response {tokens_used=}', tokens_used=tokens_used, user_prompt=user_prompt, response=response)
 

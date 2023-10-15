@@ -2,12 +2,11 @@
   "name": "ai-image-editor",
   "version": "0.0.1",
   "description": "AI Image Editor",
-  "main": "static/main.ts",
+  "main": "src/main.ts",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "format": "prettier --write '**/*.ts'",
-    "lint": "tsc && eslint --max-warnings=0 static && prettier --check '**/*.ts'",
-    "build": "esbuild static/main.ts --bundle --outfile=static/main.js"
+    "format": "prettier --write 'src/main.ts'",
+    "lint": "tsc && eslint --max-warnings=0 src && prettier --check 'src/main.ts'"
   },
   "author": "Samuel Colvin",
   "license": "MIT",

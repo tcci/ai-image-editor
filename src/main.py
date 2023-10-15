@@ -1,16 +1,15 @@
 from __future__ import annotations as _annotations
 
 import asyncio
+import subprocess
 from concurrent.futures import ProcessPoolExecutor
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta
+from dataclasses import dataclass
 from time import time
-from uuid import uuid4
-from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, Literal, ParamSpec, TypeVar, Callable
 
-from fastapi import FastAPI, Depends, Request, UploadFile, Form, HTTPException
+from fastapi import FastAPI, Depends, Request, UploadFile, Form, HTTPException, Response
 from fastapi.responses import FileResponse
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -18,8 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from PIL.Image import Image, open as open_image
 
-import logfire
-
+from .sessions import Session, sessions
 from .transform import transform_image, Refusal, ImageTransform, ImageTransformDef
 
 
@@ -48,54 +46,49 @@ async def favicon():
     return FileResponse(static_dir / 'favicon.ico')
 
 
+P = ParamSpec('P')
+R = TypeVar('R')
+
+
 @dataclass(slots=True)
-class Session:
-    session_id: str
-    width: int
-    height: int
-    mode: str
-    # conversation: list[dict[str, str]] = field(default_factory=list)
-    last_active: datetime = field(default_factory=datetime.utcnow)
-    tmp_images: list[Path] = field(default_factory=list)
+class Executor:
+    request: Request
+
+    async def run(self, func: Callable[P, R], *args: P.args) -> R:
+        loop = asyncio.get_running_loop()
+        executor = self.request.app.state.executor
+        return await loop.run_in_executor(executor, func, *args)
 
 
-class Sessions:
-    _max_age = timedelta(minutes=5)
-
-    def __init__(self):
-        self._sessions: dict[str, Session] = {}
-
-    def add_new(self, width: int, height: int, mode: str) -> Session:
-        session_id = uuid4().hex
-        session = Session(session_id=session_id, width=width, height=height, mode=mode)
-        self._sessions[session_id] = session
-        return session
-
-    def remove_old_sessions(self) -> None:
-        now = datetime.utcnow()
-        to_remove: list[Session] = []
-
-        for session in self._sessions.values():
-            if now - session.last_active > self._max_age:
-                to_remove.append(session)
-
-        for session in to_remove:
-            for path in session.tmp_images:
-                path.unlink(missing_ok=True)
-            del self._sessions[session.session_id]
-
-    async def get(self, session_id: Annotated[str, Form()]) -> Session:
-        try:
-            session = self._sessions[session_id]
-        except KeyError:
-            raise HTTPException(status_code=404, detail='Image not found')
-        else:
-            session.last_active = datetime.utcnow()
-            self.remove_old_sessions()
-            return session
+def get_executor(request: Request) -> Executor:
+    return Executor(request)
 
 
-sessions = Sessions()
+last_build: tuple[int, bytes] | None = None
+
+
+def build_main_js() -> bytes:
+    main_ts = THIS_DIR / 'main.ts'
+    global last_build
+    last_mod = main_ts.stat().st_mtime_ns
+    if last_build is not None:
+        ts, content = last_build
+        if last_mod <= ts:
+            return content
+
+    print('building main.js')
+    esbuild = THIS_DIR.parent / 'node_modules' / '.bin' / 'esbuild'
+    p = subprocess.run([esbuild, str(main_ts), '--bundle'], stdout=subprocess.PIPE, check=True, text=False)
+    last_build = last_mod, p.stdout
+    return p.stdout
+
+
+@app.get('/main.js')
+async def main_js(executor: Annotated[Executor, Depends(get_executor)]) -> Response:
+    content = await executor.run(build_main_js)
+    return Response(content=content, media_type='application/javascript')
+
+
 tmp_files_dir = 'tmp_images'
 
 
@@ -123,6 +116,7 @@ class NewImageResponse(BaseModel):
     """
     WARNING: should match `NewImageResponse` in typescript
     """
+
     type: Literal['new-image'] = 'new-image'
     session_id: str
     filename: str
@@ -158,19 +152,19 @@ class PromptResponse(BaseModel):
     """
     WARNING: should match `PromptResponse` in typescript
     """
+
     type: Literal['prompt-response'] = 'prompt-response'
     result: str | TransformationSuccess
 
 
 @app.post('/prompt/')
 async def prompt_function(
-    request: Request,
+    executor: Annotated[Executor, Depends(get_executor)],
     pil_image: Annotated[Image, Depends(load_image)],
     session: Annotated[Session, Depends(sessions.get)],
-    prompt: Annotated[str, Form()]
+    prompt: Annotated[str, Form()],
 ) -> PromptResponse:
-    loop = asyncio.get_running_loop()
-    result = await loop.run_in_executor(request.app.state.executor, transform_image, pil_image, prompt)
+    result = await executor.run(transform_image, pil_image, prompt)
     if isinstance(result, Refusal):
         return PromptResponse(result=result.message)
     else:
@@ -183,9 +177,6 @@ async def prompt_function(
         result.image.save(save_path, img_format)
         return PromptResponse(
             result=TransformationSuccess(
-                url=f'/static/{temp_path}',
-                width=width,
-                height=height,
-                transformation=result.transformation,
+                url=f'/static/{temp_path}', width=width, height=height, transformation=result.transformation
             )
         )

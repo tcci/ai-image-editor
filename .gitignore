@@ -8,3 +8,4 @@ __pycache__/
 /static/main.js
 /dist/*
 /*.py
+/scratch/

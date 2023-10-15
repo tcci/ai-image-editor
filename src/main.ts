@@ -190,25 +190,29 @@ class ImageEditor {
     } else {
       body.append('image_file', image.data)
     }
-    post('/prompt/', body).then((data: PromptResponse) => {
-      if (typeof data.result === 'string') {
-        this.messages.push({
-          type: 'system',
-          text: data.result,
-        })
-      } else {
-        const { url, width, height, transformation } = data.result
-        this.messages.push({
-          type: 'system',
-          text: 'Image Transformed',
-          attributes: convertToAttributes(transformation),
-        })
-        image.data = url
-        image.width = width
-        image.height = height
-      }
-      this.render()
-    })
+    post('/prompt/', body)
+      .then((data: PromptResponse) => {
+        if (typeof data.result === 'string') {
+          this.messages.push({
+            type: 'system',
+            text: data.result,
+          })
+        } else {
+          const { url, width, height, transformation } = data.result
+          this.messages.push({
+            type: 'system',
+            text: 'Image Transformed',
+            attributes: convertToAttributes(transformation),
+          })
+          image.data = url
+          image.width = width
+          image.height = height
+        }
+        this.render()
+      })
+      .catch(() => {
+        this.render()
+      })
   }
 
   renderHtml(html: string) {
@@ -271,14 +275,17 @@ const title = (s: string) =>
   s.replace('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 
 async function post(url: string, body: FormData): Promise<any> {
-  const r = await fetch(url, { method: 'POST', body }).catch((e) =>
-    showError(`POST Error: ${e}`),
-  )
-  if (r) {
-    if (r.ok) {
-      return await r.json()
-    } else {
-      showError(`${r.status} server response`)
-    }
+  let r
+  try {
+    r = await fetch(url, { method: 'POST', body })
+  } catch (e) {
+    showError(`POST Error: ${e}`)
+    throw e
+  }
+  if (r.ok) {
+    return await r.json()
+  } else {
+    showError(`${r.status} server response`)
+    throw new Error(`server responded with ${r.status}`)
   }
 }

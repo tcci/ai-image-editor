@@ -10,6 +10,6 @@
     "sourceMap": true,
     "esModuleInterop": true
   },
-  "include": ["static"],
+  "include": ["src"],
   "exclude": ["node_modules", "dist"]
 }
