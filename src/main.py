@@ -3,7 +3,7 @@ from __future__ import annotations as _annotations
 import asyncio
 import os
 import subprocess
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from time import time
@@ -19,6 +19,8 @@ from fastapi.middleware import Middleware
 from pydantic import BaseModel
 from PIL.Image import Image, open as open_image
 from opentelemetry.instrumentation.asgi import OpenTelemetryMiddleware
+from opentelemetry import context as otel_context
+from opentelemetry.context import Context as OtelContext
 
 from .sessions import Session, sessions
 from .transform import transform_image, Refusal, ImageTransform, ImageTransformDef
@@ -32,7 +34,7 @@ render_commit = os.getenv('RENDER_GIT_COMMIT')
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    with ProcessPoolExecutor(max_workers=8) as executor:
+    with ThreadPoolExecutor(max_workers=8) as executor:
         app.state.executor = executor
         yield
 
@@ -67,7 +69,13 @@ class Executor:
     async def run(self, func: Callable[P, R], *args: P.args) -> R:
         loop = asyncio.get_running_loop()
         executor = self.request.app.state.executor
-        return await loop.run_in_executor(executor, func, *args)
+        context = otel_context.get_current()
+        return await loop.run_in_executor(executor, self.run_in_thread, func, context, *args)
+
+    @staticmethod
+    def run_in_thread(func: Callable[P, R], context: OtelContext, *args: P.args) -> R:
+        otel_context.attach(context)
+        return func(*args)
 
 
 def get_executor(request: Request) -> Executor:

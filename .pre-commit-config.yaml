@@ -27,9 +27,3 @@ repos:
     types: [ts]
     language: system
     pass_filenames: false
-  - id: build-js
-    name: Build JS
-    entry: npm run build
-    types: [ts]
-    language: system
-    pass_filenames: false
