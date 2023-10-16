@@ -13,12 +13,18 @@ from fastapi import FastAPI, Depends, Request, UploadFile, Form, HTTPException, 
 from fastapi.responses import FileResponse
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware import Middleware
 
 from pydantic import BaseModel
 from PIL.Image import Image, open as open_image
+from opentelemetry.instrumentation.asgi import OpenTelemetryMiddleware
 
 from .sessions import Session, sessions
 from .transform import transform_image, Refusal, ImageTransform, ImageTransformDef
+
+import logfire
+
+logfire.configure(project_name='ai-image-editor')
 
 
 @asynccontextmanager
@@ -28,7 +34,8 @@ async def lifespan(app: FastAPI):
         yield
 
 
-app = FastAPI(lifespan=lifespan)
+logfire.info('starting app')
+app = FastAPI(lifespan=lifespan, middleware=[Middleware(OpenTelemetryMiddleware)])
 
 THIS_DIR = Path(__file__).parent
 static_dir = THIS_DIR.parent / 'static'
