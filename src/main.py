@@ -75,13 +75,14 @@ def get_executor(request: Request) -> Executor:
 
 
 last_build: tuple[int, bytes] | None = None
+pre_build_js: bytes | None = None
+if render_commit is not None:
+    # on render we always use the pre-built main.js
+    pre_build_js = (THIS_DIR / 'main.js').read_bytes()
 
 
 def build_main_js() -> bytes:
     global last_build
-    if render_commit is not None:
-        # on render we always use the pre-built main.js
-        return (THIS_DIR / 'main.js').read_bytes()
 
     main_ts = THIS_DIR / 'main.ts'
     last_mod = main_ts.stat().st_mtime_ns
@@ -99,8 +100,13 @@ def build_main_js() -> bytes:
 
 @app.get('/main.js')
 async def main_js(executor: Annotated[Executor, Depends(get_executor)]) -> Response:
-    content = await executor.run(build_main_js)
-    return Response(content=content, media_type='application/javascript')
+    if pre_build_js:
+        logfire.debug('using pre-built main.js')
+        return Response(content=pre_build_js, media_type='application/javascript')
+    else:
+        with logfire.span('building main.js'):
+            built_main_js = await executor.run(build_main_js)
+            return Response(content=built_main_js, media_type='application/javascript')
 
 
 tmp_files_dir = 'tmp_images'

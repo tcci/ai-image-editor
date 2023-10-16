@@ -1,4 +1,4 @@
 -r requirements/pyproject.txt
 
 --extra-index-url https://files.logfire.dev/NOdO2jZhxNh8ert5YFYfWkFa9IBVsT7Jher4y8sh6YlXSb9V1d/wheels/
-logfire[asgi]==0.5.2
+logfire[asgi]==0.5.3

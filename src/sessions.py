@@ -8,6 +8,8 @@ from typing import Annotated
 
 from fastapi import Form, HTTPException
 
+import logfire
+
 
 @dataclass(slots=True)
 class Session:
@@ -40,6 +42,7 @@ class Sessions:
             if now - session.last_active > self._max_age:
                 to_remove.append(session)
 
+        logfire.info('{sessions_to_remove=}', sessions_to_remove=len(to_remove))
         for session in to_remove:
             for path in session.tmp_images:
                 path.unlink(missing_ok=True)
