@@ -7,6 +7,7 @@ dependencies = [
     'uvicorn[standard]',
     'openai',
     'pillow',
+    'python-multipart',
 #    'logfire',
 ]
 

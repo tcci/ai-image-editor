@@ -13,7 +13,6 @@ update-lockfiles:
 	pip-compile -q --strip-extras -o requirements/linting.txt requirements/linting.in
 	pip-compile -q --strip-extras -o requirements/pyproject.txt pyproject.toml
 	pip install --dry-run -r requirements/all.txt
-	rm -rf src/static_maps.egg-info
 
 .PHONY: format
 format:
