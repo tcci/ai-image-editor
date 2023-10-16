@@ -5,7 +5,6 @@ __pycache__/
 /node_modules/
 /.logfire/
 /static/tmp_images/
-/static/main.js
 /dist/*
 /*.py
 /scratch/

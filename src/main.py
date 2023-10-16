@@ -1,6 +1,7 @@
 from __future__ import annotations as _annotations
 
 import asyncio
+import os
 import subprocess
 from concurrent.futures import ProcessPoolExecutor
 from contextlib import asynccontextmanager
@@ -25,6 +26,8 @@ from .transform import transform_image, Refusal, ImageTransform, ImageTransformD
 import logfire
 
 logfire.configure(project_name='ai-image-editor')
+
+render_commit = os.getenv('RENDER_GIT_COMMIT')
 
 
 @asynccontextmanager
@@ -76,9 +79,9 @@ last_build: tuple[int, bytes] | None = None
 
 def build_main_js() -> bytes:
     global last_build
-    pre_build_js = THIS_DIR / 'main.js'
-    if pre_build_js.is_file():
-        return pre_build_js.read_bytes()
+    if render_commit is not None:
+        # on render we always use the pre-built main.js
+        return (THIS_DIR / 'main.js').read_bytes()
 
     main_ts = THIS_DIR / 'main.ts'
     last_mod = main_ts.stat().st_mtime_ns
