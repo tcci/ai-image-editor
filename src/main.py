@@ -75,8 +75,12 @@ last_build: tuple[int, bytes] | None = None
 
 
 def build_main_js() -> bytes:
-    main_ts = THIS_DIR / 'main.ts'
     global last_build
+    pre_build_js = THIS_DIR / 'main.js'
+    if pre_build_js.is_file():
+        return pre_build_js.read_bytes()
+
+    main_ts = THIS_DIR / 'main.ts'
     last_mod = main_ts.stat().st_mtime_ns
     if last_build is not None:
         ts, content = last_build

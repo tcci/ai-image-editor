@@ -6,7 +6,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "format": "prettier --write 'src/main.ts'",
-    "lint": "tsc && eslint --max-warnings=0 src && prettier --check 'src/main.ts'"
+    "lint": "tsc && eslint --max-warnings=0 src && prettier --check 'src/main.ts'",
+    "build": "esbuild src/main.ts --bundle --outfile=src/main.js"
   },
   "author": "Samuel Colvin",
   "license": "MIT",
